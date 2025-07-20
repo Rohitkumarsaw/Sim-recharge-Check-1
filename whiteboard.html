@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Whiteboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter for general text -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* A very light, calm blue-gray background */
+            color: #334155; /* Darker slate gray for main text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1rem;
+        }
+        .container {
+            @apply bg-white p-6 rounded-3xl shadow-2xl w-full max-w-4xl mb-8 border border-gray-100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative; /* For absolute positioning of canvases */
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%; /* Make canvas container responsive */
+            max-width: 800px; /* Max width for larger screens */
+            aspect-ratio: 16 / 9; /* Maintain aspect ratio */
+            @apply border-4 border-indigo-300 bg-white rounded-lg shadow-lg;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Prevent default touch actions like scrolling */
+            background-color: transparent; /* Overlay canvas should be transparent */
+        }
+        #whiteboardCanvas {
+            background-color: #FFFFFF; /* Main canvas background */
+            z-index: 1;
+        }
+        #overlayCanvas {
+            z-index: 2; /* Overlay on top of main canvas */
+        }
+
+        .control-panel {
+            @apply bg-gray-100 p-4 rounded-xl shadow-md flex flex-wrap justify-center items-center gap-4 mt-6;
+        }
+        .control-button {
+            @apply bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg
+                   transition-all duration-300 ease-in-out shadow-md;
+        }
+        .control-button.active {
+            @apply bg-indigo-800 ring-2 ring-indigo-400;
+        }
+        .control-button:disabled {
+            @apply opacity-50 cursor-not-allowed;
+        }
+        input[type="color"] {
+            @apply w-10 h-10 rounded-full border-2 border-gray-300 cursor-pointer;
+            padding: 0;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            overflow: hidden; /* Hide the default color input border */
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: none;
+        }
+        input[type="color"]::-moz-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border: none;
+        }
+
+        input[type="range"] {
+            @apply w-24 h-2 bg-gray-300 rounded-lg appearance-none cursor-pointer;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            @apply w-4 h-4 bg-indigo-600 rounded-full shadow-md;
+            -webkit-appearance: none;
+            margin-top: -6px;
+        }
+        input[type="range"]::-moz-range-thumb {
+            @apply w-4 h-4 bg-indigo-600 rounded-full shadow-md;
+        }
+        select, input[type="number"], input[type="text"].text-input-field {
+            @apply px-3 py-1.5 rounded-lg border border-gray-300 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm;
+        }
+
+        /* Custom alert styling */
+        #customAlert {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        #alertCloseButton {
+            @apply bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-lg;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease-in-out;
+        }
+        #alertCloseButton:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        #alertCloseButton:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Custom Alert Modal -->
+    <div id="customAlert" class="hidden fixed inset-0 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-xl shadow-2xl text-gray-800 border border-gray-200 text-center">
+            <p id="alertMessage" class="mb-6 text-xl font-medium"></p>
+            <button id="alertCloseButton">
+                OK
+            </button>
+        </div>
+    </div>
+
+    <h1 class="text-5xl font-extrabold text-indigo-700 mb-10 tracking-tight leading-tight text-center">
+        Interactive <br class="sm:hidden"> Whiteboard
+    </h1>
+
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="whiteboardCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas> <!-- For live drawing previews -->
+        </div>
+
+        <div class="control-panel">
+            <!-- Tools -->
+            <button id="penTool" class="control-button active">
+                <i class="fas fa-pen"></i> Pen
+            </button>
+            <button id="eraserTool" class="control-button">
+                <i class="fas fa-eraser"></i> Eraser
+            </button>
+            <button id="rectangleTool" class="control-button">
+                <i class="fas fa-square"></i> Rectangle
+            </button>
+            <button id="circleTool" class="control-button">
+                <i class="fas fa-circle"></i> Circle
+            </button>
+            <button id="arrowTool" class="control-button">
+                <i class="fas fa-long-arrow-alt-right"></i> Arrow
+            </button>
+
+            <!-- Color Picker -->
+            <div class="flex items-center gap-2">
+                <span class="text-gray-700 font-semibold">Color:</span>
+                <input type="color" id="colorPicker" value="#EF4444">
+            </div>
+
+            <!-- Pen/Shape Size -->
+            <div class="flex items-center gap-2">
+                <span class="text-gray-700 font-semibold">Size:</span>
+                <input type="range" id="penSize" min="1" max="20" value="5">
+                <span id="penSizeValue" class="text-gray-600">5px</span>
+            </div>
+
+            <!-- Actions -->
+            <button id="clearCanvas" class="control-button bg-red-500 hover:bg-red-600">
+                <i class="fas fa-trash-alt"></i> Clear
+            </button>
+            <button id="downloadImage" class="control-button bg-green-500 hover:bg-green-600">
+                <i class="fas fa-download"></i> Download
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- Custom Alert Functions ---
+        const customAlert = document.getElementById('customAlert');
+        const alertMessage = document.getElementById('alertMessage');
+        const alertCloseButton = document.getElementById('alertCloseButton');
+
+        function showAlert(message) {
+            alertMessage.innerHTML = message;
+            customAlert.classList.remove('hidden');
+            customAlert.style.display = 'flex';
+        }
+
+        function closeAlert() {
+            customAlert.classList.add('hidden');
+            customAlert.style.display = 'none';
+        }
+
+        alertCloseButton.addEventListener('click', closeAlert);
+
+        // --- Canvas Setup ---
+        const mainCanvas = document.getElementById('whiteboardCanvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const overlayCtx = overlayCanvas.getContext('2d');
+
+        // Set initial canvas dimensions based on container or window size
+        function resizeCanvases() {
+            const container = mainCanvas.parentElement;
+            // Set internal canvas resolution for crisp drawing
+            const baseWidth = container.offsetWidth;
+            const baseHeight = (container.offsetWidth * 9 / 16);
+
+            mainCanvas.width = baseWidth * 2;
+            mainCanvas.height = baseHeight * 2;
+            overlayCanvas.width = baseWidth * 2;
+            overlayCanvas.height = baseHeight * 2;
+
+            // Scale contexts to match display size
+            mainCtx.scale(2, 2);
+            overlayCtx.scale(2, 2);
+
+            // Clear both canvases and fill main with white
+            clearCanvas();
+        }
+
+        // Initial resize and on window resize
+        window.addEventListener('resize', resizeCanvases);
+        document.addEventListener('DOMContentLoaded', resizeCanvases); // Initial call
+
+        // --- Drawing State ---
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let startX = 0;
+        let startY = 0;
+        let penColor = '#EF4444'; // Default red
+        let penWidth = 5;
+        let currentTool = 'pen'; // 'pen', 'eraser', 'rectangle', 'circle', 'arrow'
+
+        // --- Drawing Functions ---
+        function getCoordinates(e) {
+            const rect = overlayCanvas.getBoundingClientRect(); // Use overlayCanvas for event coordinates
+            let clientX, clientY;
+
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            // Calculate coordinates relative to the displayed overlayCanvas element
+            // These are the logical (CSS) pixels. The ctx.scale(2,2) will handle the internal pixel doubling.
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            return [x, y];
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            [lastX, lastY] = getCoordinates(e); // For pen/eraser
+            [startX, startY] = getCoordinates(e); // For shapes position
+
+            if (currentTool === 'rectangle' || currentTool === 'circle' || currentTool === 'arrow') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear previous preview
+            }
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+
+            const [currentX, currentY] = getCoordinates(e);
+
+            if (currentTool === 'pen') {
+                mainCtx.beginPath();
+                mainCtx.moveTo(lastX, lastY);
+                mainCtx.lineTo(currentX, currentY);
+                mainCtx.strokeStyle = penColor;
+                mainCtx.lineWidth = penWidth;
+                mainCtx.lineCap = 'round';
+                mainCtx.lineJoin = 'round';
+                mainCtx.stroke();
+            } else if (currentTool === 'eraser') {
+                mainCtx.beginPath();
+                mainCtx.moveTo(lastX, lastY);
+                mainCtx.lineTo(currentX, currentY);
+                mainCtx.strokeStyle = '#FFFFFF'; // Eraser color is whiteboard background
+                mainCtx.lineWidth = penWidth * 2; // Eraser is usually thicker
+                mainCtx.lineCap = 'round';
+                mainCtx.lineJoin = 'round';
+                mainCtx.stroke();
+            } else if (currentTool === 'rectangle') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear previous preview
+                overlayCtx.strokeStyle = penColor;
+                overlayCtx.lineWidth = penWidth;
+                overlayCtx.strokeRect(startX, startY, currentX - startX, currentY - startY);
+            } else if (currentTool === 'circle') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear previous preview
+                overlayCtx.strokeStyle = penColor;
+                overlayCtx.lineWidth = penWidth;
+                const radiusX = Math.abs(currentX - startX) / 2;
+                const radiusY = Math.abs(currentY - startY) / 2;
+                const centerX = startX + (currentX - startX) / 2;
+                const centerY = startY + (currentY - startY) / 2;
+
+                overlayCtx.beginPath();
+                // Draw an ellipse (circle if radiusX == radiusY)
+                overlayCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+                overlayCtx.stroke();
+            } else if (currentTool === 'arrow') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear previous preview
+                drawArrow(overlayCtx, startX, startY, currentX, currentY, penColor, penWidth);
+            }
+
+            [lastX, lastY] = [currentX, currentY];
+        }
+
+        function stopDrawing(e) {
+            if (!isDrawing) return;
+            isDrawing = false;
+
+            const [endX, endY] = getCoordinates(e);
+
+            if (currentTool === 'rectangle') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear preview
+                mainCtx.strokeStyle = penColor;
+                mainCtx.lineWidth = penWidth;
+                mainCtx.strokeRect(startX, startY, endX - startX, endY - startY);
+            } else if (currentTool === 'circle') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear preview
+                mainCtx.strokeStyle = penColor;
+                mainCtx.lineWidth = penWidth;
+                const radiusX = Math.abs(endX - startX) / 2;
+                const radiusY = Math.abs(endY - startY) / 2;
+                const centerX = startX + (endX - startX) / 2;
+                const centerY = startY + (endY - startY) / 2;
+
+                mainCtx.beginPath();
+                mainCtx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+                mainCtx.stroke();
+            } else if (currentTool === 'arrow') {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear preview
+                drawArrow(mainCtx, startX, startY, endX, endY, penColor, penWidth);
+            }
+        }
+
+        // Helper function to draw an arrow
+        function drawArrow(context, fromX, fromY, toX, toY, color, width) {
+            const headlen = 10 + width; // length of head in pixels, scaled by line width
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+
+            context.strokeStyle = color;
+            context.lineWidth = width;
+            context.lineCap = 'round';
+            context.lineJoin = 'round';
+
+            // Draw the main line
+            context.beginPath();
+            context.moveTo(fromX, fromY);
+            context.lineTo(toX, toY);
+            context.stroke();
+
+            // Draw the arrowhead
+            context.beginPath();
+            context.moveTo(toX, toY);
+            context.lineTo(toX - headlen * Math.cos(angle - Math.PI / 7), toY - headlen * Math.sin(angle - Math.PI / 7));
+            context.lineTo(toX - headlen * Math.cos(angle + Math.PI / 7), toY - headlen * Math.sin(angle + Math.PI / 7));
+            context.closePath(); // Close the path to fill the arrowhead
+            context.fillStyle = color;
+            context.fill(); // Fill the arrowhead
+            context.stroke(); // Stroke the arrowhead outline
+        }
+
+
+        // --- Event Listeners for Drawing ---
+        overlayCanvas.addEventListener('mousedown', startDrawing);
+        overlayCanvas.addEventListener('mousemove', draw);
+        overlayCanvas.addEventListener('mouseup', stopDrawing);
+        overlayCanvas.addEventListener('mouseout', stopDrawing);
+
+        // Touch events for mobile
+        overlayCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling
+            startDrawing(e);
+        });
+        overlayCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent scrolling
+            draw(e);
+        });
+        overlayCanvas.addEventListener('touchend', stopDrawing);
+        overlayCanvas.addEventListener('touchcancel', stopDrawing);
+
+        // --- Control Panel Elements & Listeners ---
+        const penToolButton = document.getElementById('penTool');
+        const eraserToolButton = document.getElementById('eraserTool');
+        const rectangleToolButton = document.getElementById('rectangleTool');
+        const circleToolButton = document.getElementById('circleTool');
+        const arrowToolButton = document.getElementById('arrowTool'); // New arrow button
+        const colorPickerInput = document.getElementById('colorPicker');
+        const penSizeInput = document.getElementById('penSize');
+        const penSizeValueSpan = document.getElementById('penSizeValue');
+        const clearCanvasButton = document.getElementById('clearCanvas');
+        const downloadImageButton = document.getElementById('downloadImage');
+        
+        // Removed text-specific controls
+        // const textControlsDiv = document.getElementById('textControls');
+        // const fontFamilySelect = document.getElementById('fontFamilySelect');
+        // const fontSizeInput = document.getElementById('fontSizeInput');
+
+        // Tool Selection
+        const toolButtons = document.querySelectorAll('.control-panel .control-button');
+
+        function setActiveTool(tool) {
+            currentTool = tool;
+            toolButtons.forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`${tool}Tool`).classList.add('active');
+
+            // Hide text controls (since text tool is removed)
+            // if (textControlsDiv) textControlsDiv.classList.add('hidden');
+
+            // Update color picker visibility/active state
+            if (tool === 'eraser') {
+                colorPickerInput.style.opacity = 0.5; // Dim color picker for eraser
+                colorPickerInput.style.pointerEvents = 'none';
+            } else {
+                colorPickerInput.style.opacity = 1;
+                colorPickerInput.style.pointerEvents = 'auto';
+            }
+        }
+
+        penToolButton.addEventListener('click', () => setActiveTool('pen'));
+        eraserToolButton.addEventListener('click', () => setActiveTool('eraser'));
+        rectangleToolButton.addEventListener('click', () => setActiveTool('rectangle'));
+        circleToolButton.addEventListener('click', () => setActiveTool('circle'));
+        arrowToolButton.addEventListener('click', () => setActiveTool('arrow')); // New event listener for arrow tool
+
+        // Color Selection (Full Color Picker)
+        colorPickerInput.addEventListener('input', () => {
+            penColor = colorPickerInput.value;
+        });
+
+        // Pen/Shape Size
+        penSizeInput.addEventListener('input', () => {
+            penWidth = parseInt(penSizeInput.value);
+            penSizeValueSpan.textContent = `${penWidth}px`;
+        });
+
+        // Removed text controls event listeners
+        // fontFamilySelect.addEventListener('change', () => {
+        //     currentFontFamily = fontFamilySelect.value;
+        // });
+        // fontSizeInput.addEventListener('input', () => {
+        //     currentFontSize = parseInt(fontSizeInput.value);
+        //     if (isNaN(currentFontSize) || currentFontSize < 10) currentFontSize = 10;
+        //     if (currentFontSize > 72) currentFontSize = 72;
+        // });
+
+
+        // Clear Canvas
+        function clearCanvas() {
+            mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+            mainCtx.fillStyle = '#FFFFFF';
+            mainCtx.fillRect(0, 0, mainCanvas.width, mainCanvas.height);
+            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear overlay too
+        }
+        clearCanvasButton.addEventListener('click', () => {
+            clearCanvas();
+            showAlert('Canvas cleared!');
+        });
+
+        // Download Image
+        downloadImageButton.addEventListener('click', () => {
+            // Create a temporary canvas to draw the main canvas content (which is already scaled)
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = mainCanvas.width / 2; // Descale for download
+            tempCanvas.height = mainCanvas.height / 2; // Descale for download
+            const tempCtx = tempCanvas.getContext('2d');
+
+            // Draw the current main canvas content onto the temporary canvas
+            tempCtx.drawImage(mainCanvas, 0, 0, tempCanvas.width, tempCanvas.height);
+
+            const dataURL = tempCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = dataURL;
+            a.download = 'whiteboard_drawing.png';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            showAlert('Drawing downloaded as PNG!');
+        });
+
+        // Initial setup
+        document.addEventListener('DOMContentLoaded', () => {
+            setActiveTool('pen'); // Default tool
+            colorPickerInput.value = penColor; // Set initial color picker value
+            penSizeInput.value = penWidth; // Set initial pen size value
+            penSizeValueSpan.textContent = `${penWidth}px`; // Display initial pen size
+            // Removed text-specific initial settings
+            // fontFamilySelect.value = currentFontFamily;
+            // fontSizeInput.value = currentFontSize;
+        });
+
+    </script>
+</body>
+</html>
